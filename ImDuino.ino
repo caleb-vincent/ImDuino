@@ -1,8 +1,37 @@
 // #define IMDUINO_TFT_22_ILI9225
 // #define IMDUINO_SSD1306
+// #define IMDUINO_M5GFX
 
 #include "imgui.h"
 texture_alpha8_t fontAtlas;
+
+#ifdef IMDUINO_M5GFX
+  #include <M5Unified.h>
+  texture_color8_t screen;
+
+  void screen_init()
+  {
+    M5.begin();
+
+    M5.Log.setLogLevel(m5::log_target_serial, ESP_LOG_VERBOSE);
+    M5.Log.setEnableColor(m5::log_target_serial, false);
+    M5.Log.setSuffix(m5::log_target_serial, "\n");
+
+    M5.Log(ESP_LOG_VERBOSE, "Screen %dx%d", M5.Display.width(), M5.Display.height());
+
+    M5.Display.setEpdMode(epd_mode_t::epd_fastest);
+
+    screen.init(M5.Display.width(), M5.Display.height());
+    assert(sizeof(uint8_t) == screen.size);
+  }
+
+  void screen_draw()
+  {
+    M5.Display.pushImage(0, 0, M5.Display.width(), M5.Display.height(), (uint8_t*)screen.pixels, lgfx::rgb332_1Byte);
+  }
+#  define SCREENX M5.Display.width()
+#  define SCREENY M5.Display.height()
+#endif
 
 #ifdef IMDUINO_TFT_22_ILI9225
 #  define SCREENX 220
@@ -110,9 +139,17 @@ void setup()
 
 float f         = 0.0f;
 unsigned long t = 0;
+unsigned long frameCount = 0;
 
 void loop()
 {
+  ++frameCount;
+  if(frameCount == 0)
+  {
+    frameCount = 1;
+    t = 0;
+  }
+
   ImGuiIO &io  = ImGui::GetIO();
   io.DeltaTime = 1.0f / 60.0f;
 
@@ -159,11 +196,13 @@ void loop()
 
   deltaTime -= (drawTime + renderTime + rasterTime);
 
-  ImGui::Text("Hardware write time %d ms", drawTime);
-  ImGui::Text("Render time %d ms", renderTime);
-  ImGui::Text("Raster time %d ms", rasterTime);
-  ImGui::Text("Remaining time %d ms", deltaTime);
+  ImGui::Text("Hardware write time %lu ms", drawTime);
+  ImGui::Text("Render time %lu ms", renderTime);
+  ImGui::Text("Raster time %lu ms", rasterTime);
+  ImGui::Text("Remaining time %u ms", deltaTime);
   ImGui::SliderFloat("SliderFloat", &f, 0.0f, 1.0f);
+
+  ImGui::Text("Avg Frame Time %lu ms", t / frameCount);
 
   renderTime = millis();
   ImGui::Render();
