@@ -1,13 +1,54 @@
 // #define IMDUINO_TFT_22_ILI9225
 // #define IMDUINO_SSD1306
-// #define IMDUINO_M5GFX
+#define IMDUINO_M5GFX
 
 #include "imgui.h"
 texture_alpha8_t fontAtlas;
 
 #ifdef IMDUINO_M5GFX
   #include <M5Unified.h>
-  texture_color8_t screen;
+  LGFX_Sprite screen{ &M5.Display };
+
+  using ColorDisplay_t = color16_t; 
+  using ColorRaster_t = ColorDisplay_t; //ColorDisplay_t, color16_alpha8_t, color32_t
+  using Position_t = int_fast16_t;
+
+  struct SoftRasterCallbacks
+  {
+    inline static void setPixel(Position_t const& x, Position_t const& y, const ColorDisplay_t& color) __attribute__((always_inline))
+    {
+      screen.writePixel(x, y, color.RGB16());
+    }
+
+    inline static void setRect(Position_t const& x,Position_t const&y, Position_t const& w, Position_t const& h, ColorRaster_t const& color) __attribute__((always_inline))
+    {
+      if(color.A() != 0xff)
+      {
+        screen.fillRectAlpha(x, y, w,  h, color.A(), color.RGB16());
+      }
+      else  
+      {
+        screen.writeFillRectPreclipped(x, y,w,  h, color.RGB16());
+      }
+    }
+
+    inline static ColorDisplay_t getPixel(Position_t const& x, Position_t const& y) __attribute__((always_inline))
+    {
+      return screen.readPixel(x,y);
+    }
+
+    inline static Position_t width() __attribute__((always_inline))
+    {
+      return screen.width();
+    }
+
+    inline static Position_t height() __attribute__((always_inline))
+    {
+      return screen.height();
+    }
+  };
+
+  ImGui_ImplSoftraster<Position_t, ColorRaster_t, SoftRasterCallbacks> softraster;
 
   void screen_init()
   {
@@ -21,16 +62,25 @@ texture_alpha8_t fontAtlas;
 
     M5.Display.setEpdMode(epd_mode_t::epd_fastest);
 
-    screen.init(M5.Display.width(), M5.Display.height());
-    assert(sizeof(uint8_t) == screen.size);
+    screen.setColorDepth(lgfx::rgb332_1Byte);
+    screen.createSprite( M5.Display.width(),  M5.Display.height());
+
+    assert(screen.getBuffer() != nullptr);
+
+    M5.Log(ESP_LOG_VERBOSE, "FrameBfffer %dx%d, %dbpp", screen.width(), screen.height(), screen.getColorDepth() & lgfx::bit_mask);
   }
 
   void screen_draw()
   {
-    M5.Display.pushImage(0, 0, M5.Display.width(), M5.Display.height(), (uint8_t*)screen.pixels, lgfx::rgb332_1Byte);
+    screen.pushSprite(0,0);
   }
 #  define SCREENX M5.Display.width()
 #  define SCREENY M5.Display.height()
+#else
+
+  template<typename Position_t, typename Color_t>
+  struct SoftRasterCallbacks;
+
 #endif
 
 #ifdef IMDUINO_TFT_22_ILI9225
@@ -49,6 +99,9 @@ const uint8_t TFTSDI = 13;
 TFT_22_ILI9225 tft = TFT_22_ILI9225(TFTRST, TFTRS, TFTCS, TFTLED, 128);
 SPIClass tftspi(HSPI);
 texture_color16_t screen;
+
+
+ImGui_ImplSoftraster<int32_t, color16_t, SoftRasterCallbacks<int32_t, Color16_t>> softraster;
 
 void screen_init()
 {
@@ -103,6 +156,50 @@ void screen_draw()
   oled.display();
 }
 
+
+ImGui_ImplSoftraster<int32_t, color16_t, SoftRasterCallbacks<int32_t, alpha8_t>> softraster;
+
+
+#endif
+
+
+#ifndef IMDUINO_M5GFX
+
+  template<typename Position_t, typename Color_t>
+  struct SoftRasterCallbacks
+  {
+    inline static void setPixel(Position_t const& x, Position_t const& y, const color8_t& color) __attribute__((always_inline))
+    {
+      screen.at(x, y) = color;
+    }
+
+    inline static void setRect(Position_t const& rx, Position_t const& ry, Position_t const& w, Position_t const& h, Color_t const& color) __attribute__((always_inline))
+    {
+      for (int32_t y = ry; y < ry + h; ++y)
+      {
+           for (int32_t x = rx; x < rx + w; ++x)
+          {
+            screen.at(x,y) = color;
+          }
+      }
+    }
+
+    inline static Color_t getPixel(Position_t const& x, Position_t const& y) __attribute__((always_inline))
+    {
+      return screen.at(x,y);
+    }
+
+    inline static Position_t width() __attribute__((always_inline))
+    {
+      return screen.w;
+    }
+
+    inline static Position_t height() __attribute__((always_inline))
+    {
+      return screen.h;
+    }
+  };
+
 #endif
 
 unsigned long drawTime;
@@ -116,8 +213,6 @@ void setup()
   Serial.begin(115200);
 
   context = ImGui::CreateContext();
-
-  ImGui_ImplSoftraster_Init(&screen);
 
   ImGuiStyle &style      = ImGui::GetStyle();
   style.AntiAliasedLines = false;
@@ -183,8 +278,9 @@ void loop()
     0.0f; // faster tweaks                                // e.g. R1 or R2
           // (PS4), RB or RT (Xbox), R or ZL (Switch)
 
-  ImGui_ImplSoftraster_NewFrame();
+  softraster.NewFrame();
   ImGui::NewFrame();
+  ImGui::Begin("Debug"/*, nullptr, ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize*/);
   ImGui::SetWindowPos(ImVec2(0.0, 0.0));
   ImGui::SetWindowSize(ImVec2(SCREENX, SCREENY));
 
@@ -204,12 +300,14 @@ void loop()
 
   ImGui::Text("Avg Frame Time %lu ms", t / frameCount);
 
+  ImGui::End();
+
   renderTime = millis();
   ImGui::Render();
   renderTime = millis() - renderTime;
 
   rasterTime = millis();
-  ImGui_ImplSoftraster_RenderDrawData(ImGui::GetDrawData());
+  softraster.RenderDrawData(ImGui::GetDrawData());
   rasterTime = millis() - rasterTime;
 
   drawTime = millis();
