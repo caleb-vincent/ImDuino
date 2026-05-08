@@ -9,6 +9,9 @@ texture_alpha8_t fontAtlas;
   #include <M5Unified.h>
   LGFX_Sprite screen{ &M5.Display };
 
+  
+  constexpr auto SCREEN_COLOR = lgfx::rgb332_1Byte
+  
   using ColorDisplay_t = color16_t; 
   using ColorRaster_t = ColorDisplay_t; //ColorDisplay_t, color16_alpha8_t, color32_t
   using Position_t = int_fast16_t;
@@ -62,7 +65,8 @@ texture_alpha8_t fontAtlas;
 
     M5.Display.setEpdMode(epd_mode_t::epd_fastest);
 
-    screen.setColorDepth(lgfx::rgb332_1Byte);
+    screen.setColorDepth(SCREEN_COLOR);
+    //screen.setPsram( true );
     screen.createSprite( M5.Display.width(),  M5.Display.height());
 
     assert(screen.getBuffer() != nullptr);
@@ -74,8 +78,8 @@ texture_alpha8_t fontAtlas;
   {
     screen.pushSprite(0,0);
   }
-#  define SCREENX M5.Display.width()
-#  define SCREENY M5.Display.height()
+#  define SCREENX screen.width()
+#  define SCREENY screen.height()
 #else
 
   template<typename Position_t, typename Color_t>

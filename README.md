@@ -3,6 +3,28 @@ ImGui on Arduino example
 
 Use the 
 
+#  M5Stack
+
+By default, the full screen is used with 8bpp (RGB332) color.
+
+## Requirements
+
+1. An M5Stack device wih configured display, such as
+    - Core
+    - Core2
+    - CoreS3
+    - Cardputer (Requires additional Cardputer library)
+2. Installed M5Unified and M5GFX libraries
+3. Uncomment `#define IMDUINO_M5GFX` at the top of `ImDuino.ino`
+
+
+## Options
+ - Change `SCREEN_COLOR` to other lgfx-defined colors. *Note: attempting to use more than 8bpp may result in a frame buffer larger than the maximum heap allocation size.*
+ - Adjust `screen.createSprite( M5.Display.width(),  M5.Display.height())` to a smaller portion of the screen.
+ - Enable alphablending during rasterization by changing `using ColorRaster_t = ColorDisplay_t` to a color with an alpha channel *e.g.* `color16_alpha8_t` or `color32_t`. This will more than double the frame raster time.
+ - Uncomment `screen.setPsram( true )` to enable larger frame buffers. *Note: this is untested and will be slower if it works.*
+
+
 # TFT_22_ILI9225 220x176 16bpp TFT
 
 ## Requirements
